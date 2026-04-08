@@ -16,8 +16,12 @@ vault_namespace = "cicd-demo-ns"
 azure_tenant_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
 azure_client_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
 
-# Defaults — only override if the demo VM hostname or DB name changed
+# Private IP of the demo VM — Vault connects over the HVN peering, NOT the public hostname.
+# Get it after applying infra/aws/:
+#   cd infra/aws && terraform output -raw demo_vm_private_ip
+db_hostname = "10.0.1.x"
+
+# Defaults — only override if changed
 postgres_username = "postgres"
-db_hostname       = "demovm.ricardo.engineer"
 db_port           = 5432
 db_name           = "demo_app"

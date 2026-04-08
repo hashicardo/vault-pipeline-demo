@@ -53,7 +53,7 @@ if [[ ! -d "$RUNNER_DIR" ]]; then
   log "INFO" "Downloading GitHub Actions runner v$RUNNER_VERSION..."
   sudo -u "$RUNNER_USER" mkdir -p "$RUNNER_DIR"
   curl -fsSL \
-    "https://github.com/actions/runner/releases/download/v$RUNNER_VERSION/actions-runner-linux-x64-$RUNNER_VERSION.tar.gz" \
+    "https://github.com/actions/runner/releases/download/v$RUNNER_VERSION/actions-runner-linux-arm64-$RUNNER_VERSION.tar.gz" \
     -o /tmp/actions-runner.tar.gz
   sudo -u "$RUNNER_USER" tar -xzf /tmp/actions-runner.tar.gz -C "$RUNNER_DIR"
   rm /tmp/actions-runner.tar.gz
@@ -71,6 +71,7 @@ sudo -u "$RUNNER_USER" "$RUNNER_DIR/config.sh" \
 
 # ── 5. Install as systemd service ─────────────────────────────────────────────
 log "INFO" "Installing runner as systemd service..."
+cd "$RUNNER_DIR"
 "$RUNNER_DIR/svc.sh" install "$RUNNER_USER"
 "$RUNNER_DIR/svc.sh" start
 

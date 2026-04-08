@@ -32,9 +32,8 @@ variable "postgres_password" {
 }
 
 variable "db_hostname" {
-  description = "Hostname Vault uses to reach PostgreSQL"
+  description = "Private IP of the demo VM — Vault reaches PostgreSQL over the HVN peering, not the public internet. Get this from: terraform output -raw demo_vm_private_ip (in infra/aws/)"
   type        = string
-  default     = "demovm.ricardo.engineer"
 }
 
 variable "db_port" {

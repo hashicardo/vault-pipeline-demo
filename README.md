@@ -10,14 +10,14 @@ credential is gone. Not rotated. Not revoked. Just gone.
 
 ## Prerequisites
 
-| Tool | Purpose |
-|---|---|
-| Terraform >= 1.5 | Infrastructure provisioning |
-| Azure CLI (`az`) | Bootstrap authentication |
-| Vault CLI | Smoke-testing (optional) |
-| `gh` CLI | Setting Actions secrets |
+| Tool | Version | Purpose |
+|---|---|---|
+| Terraform | >= 1.11 | Infrastructure provisioning |
+| Azure CLI (`az`) | any | Bootstrap authentication |
+| Vault CLI | any | Smoke-testing (optional) |
+| `gh` CLI | any | Runner token + setting Actions secrets |
 
-Accounts required: AWS, Azure, HCP Vault (already running), Cloudflare,
+Accounts required: AWS, Azure, HCP (Vault + platform credentials), Cloudflare,
 GitHub (`hashicardo/vault-pipeline-demo`).
 
 ---
@@ -26,42 +26,76 @@ GitHub (`hashicardo/vault-pipeline-demo`).
 
 ### 1. Export credentials
 
+All providers authenticate via environment variables — nothing sensitive goes
+into `.tf` or `.tfvars` files.
+
 ```bash
-# AWS
-export AWS_ACCESS_KEY_ID=...
-export AWS_SECRET_ACCESS_KEY=...
+# AWS (use doormat or long-lived creds)
+export AWS_ACCESS_KEY_ID="..."
+export AWS_SECRET_ACCESS_KEY="..."
+export AWS_SESSION_TOKEN="..."        # if using doormat / assumed role
 
-# Azure (or use az login --use-device-code)
-export ARM_TENANT_ID=...
-export ARM_CLIENT_ID=...
-export ARM_CLIENT_SECRET=...
+# Azure — option A: service principal
+export ARM_TENANT_ID="..."
+export ARM_CLIENT_ID="..."
+export ARM_CLIENT_SECRET="..."
+# Azure — option B: CLI login (local dev)
+# az login && export ARM_USE_CLI=true
 
-# HCP Vault
-export VAULT_TOKEN=...          # root or admin token
+# HCP platform (used by the HCP Terraform provider for VPC peering)
+export HCP_CLIENT_ID="..."
+export HCP_CLIENT_SECRET="..."
 
-# Cloudflare
-export CLOUDFLARE_API_TOKEN=... # needs Zone:DNS:Edit
+# HCP Vault (used by the Vault Terraform provider)
+export VAULT_ADDR="https://<cluster-id>.hashicorp.cloud:8200"
+export VAULT_TOKEN="..."              # admin token for the admin namespace
+
+# Cloudflare (used by both the Cloudflare provider and Caddy on the VM)
+export CLOUDFLARE_API_TOKEN="..."     # needs Zone:DNS:Edit
 ```
 
-### 2. Sensitive variables
+### 2. Export sensitive Terraform variables
 
-Create a file **outside** the repo (never commit this):
-
-```bash
-cat > ~/vault-demo.tfvars <<'EOF'
-home_ip              = "YOUR_HOME_IP/32"
-office_ip            = "YOUR_OFFICE_IP/32"
-ssh_public_key       = "ssh-ed25519 AAAA..."
-cloudflare_zone_id   = "YOUR_ZONE_ID"
-EOF
-```
-
-Export secrets as environment variables (Terraform reads `TF_VAR_*`):
+These are marked `sensitive = true` in the modules and must not appear in any
+`.tfvars` file. Terraform picks them up automatically from `TF_VAR_*`.
 
 ```bash
+# PostgreSQL root password — pick something strong, reuse it for all modules
 export TF_VAR_postgres_password="$(openssl rand -base64 24)"
+
+# Cloudflare API token (also passed into the demo VM for Caddy's TLS challenge)
 export TF_VAR_cloudflare_api_token="$CLOUDFLARE_API_TOKEN"
+
+# GitHub runner registration token — expires in 1 hour, generate fresh before
+# applying infra/aws each time
+export TF_VAR_gh_runner_token="$(gh api \
+  --method POST \
+  -H "Accept: application/vnd.github+json" \
+  /repos/hashicardo/vault-pipeline-demo/actions/runners/registration-token \
+  --jq '.token')"
 ```
+
+### 3. Populate per-module tfvars
+
+Each module ships with a `terraform.tfvars.example`. Copy and fill in the
+non-sensitive values — these files are gitignored and stay local.
+
+```bash
+cp infra/aws/terraform.tfvars.example   infra/aws/terraform.tfvars
+cp infra/vault/terraform.tfvars.example infra/vault/terraform.tfvars
+# infra/azure has no input variables — nothing to copy
+```
+
+Key values to fill in `infra/aws/terraform.tfvars`:
+
+| Variable | Where to find it |
+|---|---|
+| `home_ip` / `office_ip` | Your public IPs as `/32` CIDRs |
+| `ssh_public_key` | Contents of `~/.ssh/id_ed25519.pub` |
+| `cloudflare_zone_id` | Cloudflare dashboard → your domain → Overview |
+| `hcp_org_id` | HCP Portal → Settings → General |
+| `hcp_project_id` | HCP Portal → Settings → General |
+| `hvn_id` | HCP Portal → Virtual Networks (CIDR is read automatically) |
 
 ---
 
@@ -72,53 +106,49 @@ export TF_VAR_cloudflare_api_token="$CLOUDFLARE_API_TOKEN"
 ```bash
 cd infra/azure
 terraform init
-terraform apply -var-file=~/vault-demo.tfvars
+terraform apply
 ```
 
-Note the outputs — you need them for Step 3:
-
-```
-azure_tenant_id = "..."
-azure_client_id = "..."
-```
-
-### Step 2 — AWS (EC2, VPC, DNS)
-
-Generate a fresh GitHub runner token first (it expires in 1 hour):
+Capture the outputs for Step 3:
 
 ```bash
-gh api \
-  --method POST \
-  -H "Accept: application/vnd.github+json" \
-  /repos/hashicardo/vault-pipeline-demo/actions/runners/registration-token \
-  --jq '.token'
+terraform output azure_tenant_id
+terraform output azure_client_id
 ```
 
-Then apply:
+Fill both values into `infra/vault/terraform.tfvars`.
+
+### Step 2 — AWS (VPC, EC2, DNS, HCP peering)
+
+> Ensure `TF_VAR_gh_runner_token` is set — it expires in 1 hour.
 
 ```bash
 cd infra/aws
 terraform init
-terraform apply \
-  -var-file=~/vault-demo.tfvars \
-  -var="gh_runner_token=TOKEN_FROM_ABOVE"
+terraform apply
 ```
 
-Wait ~3 minutes for the demo VM to boot and PostgreSQL to start before
-proceeding.
+Once applied, populate the private IP into the Vault module's tfvars before
+proceeding — Vault connects over the HVN peering, not the public hostname:
 
-### Step 3 — Vault (JWT auth, DB secrets engine, policy)
+```bash
+terraform output -raw demo_vm_private_ip
+# paste the result into infra/vault/terraform.tfvars as db_hostname
+```
+
+Wait ~3 minutes for the demo VM to boot and PostgreSQL to initialise before
+proceeding to Step 3.
+
+### Step 3 — Vault (namespace, JWT auth, DB secrets engine, policy)
 
 ```bash
 cd infra/vault
 terraform init
-terraform apply \
-  -var="vault_addr=https://YOUR-HCP-VAULT-URL:8200" \
-  -var="azure_tenant_id=TENANT_ID_FROM_STEP_1" \
-  -var="azure_client_id=CLIENT_ID_FROM_STEP_1"
+terraform apply
 ```
 
-(Postgres password is read from `TF_VAR_postgres_password`.)
+`TF_VAR_postgres_password` is the only sensitive variable; everything else is
+in `terraform.tfvars`.
 
 ---
 
@@ -127,21 +157,21 @@ terraform apply \
 ```bash
 REPO="hashicardo/vault-pipeline-demo"
 
-gh secret set AZURE_CLIENT_ID       --repo "$REPO" --body "..."
-gh secret set AZURE_TENANT_ID       --repo "$REPO" --body "..."
-gh secret set AZURE_SUBSCRIPTION_ID --repo "$REPO" --body "..."
-gh secret set VAULT_ADDR            --repo "$REPO" --body "https://YOUR-HCP-VAULT-URL:8200"
+gh secret set AZURE_CLIENT_ID       --repo "$REPO" --body "$(cd infra/azure && terraform output -raw azure_client_id)"
+gh secret set AZURE_TENANT_ID       --repo "$REPO" --body "$(cd infra/azure && terraform output -raw azure_tenant_id)"
+gh secret set AZURE_SUBSCRIPTION_ID --repo "$REPO" --body "$(az account show --query id -o tsv)"
+gh secret set VAULT_ADDR            --repo "$REPO" --body "$VAULT_ADDR"
 ```
 
-Create the **`demo`** environment in the repo settings (Actions → Environments).
-No secrets need to live in the environment itself — the `bound_claims` in Vault
-enforce the environment constraint.
+Create the **`demo`** environment in repo Settings → Environments. No secrets
+need to live in the environment itself — the `bound_claims` in the Vault JWT
+role enforce the environment constraint.
 
 ---
 
 ## Running the demo
 
-### Main pipeline (triggers automatically on push, or run manually)
+### Main pipeline
 
 ```
 Actions → Vault JWT Auth Demo → Run workflow
@@ -149,8 +179,8 @@ Actions → Vault JWT Auth Demo → Run workflow
 
 Jobs run in order: `auth` → `fetch-secret` → `use-secret`
 
-Watch the web UI at **https://demovm.ricardo.engineer** — the countdown starts
-as soon as the credential is issued.
+Watch **https://demovm.ricardo.engineer** — the countdown starts as soon as the
+credential is issued.
 
 ### Expiry proof (run 5+ minutes after the pipeline completes)
 
@@ -158,8 +188,8 @@ as soon as the credential is issued.
 Actions → Show Secret Expiry → Run workflow
 ```
 
-Provide the `db_user` and `db_pass` values from the previous run's job
-summary. The job will fail with:
+Provide the `db_user` and `db_pass` from the previous run's job summary. The
+job will fail with:
 
 ```
 FATAL: role "v-token-xxxx" does not exist
@@ -190,8 +220,8 @@ Azure Entra ID ──── federated credential ──── no stored secret
   │
   │  Azure access token  (audience: api://<CLIENT_ID>)
   ▼
-HCP Vault (JWT auth backend → demo-db-policy)
-  │
+HCP Vault (JWT auth → cicd-demo-ns → demo-db-policy)
+  │  VPC peering (HVN ↔ demo VPC)
   │  dynamic credential  (TTL: 300s)
   ▼
 PostgreSQL on demo-vm  ──── secret_log table
@@ -210,8 +240,8 @@ EXPIRED — role dropped by Vault at TTL
 | Path | What it does |
 |---|---|
 | `infra/azure/` | Entra ID app + GitHub OIDC federated credential |
-| `infra/aws/` | VPC, EC2 (demo + runner), Cloudflare DNS |
-| `infra/vault/` | JWT auth, database secrets engine, policy |
+| `infra/aws/` | VPC, EC2 (demo + runner), Cloudflare DNS, HCP peering |
+| `infra/vault/` | Namespace, JWT auth, database secrets engine, policy |
 | `web/app.py` | Flask UI — reads `secret_log`, serves countdown |
 | `.github/workflows/demo-pipeline.yml` | Main 3-job pipeline |
 | `.github/workflows/show-expiry.yml` | Manually-triggered expiry proof |

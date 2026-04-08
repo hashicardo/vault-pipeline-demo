@@ -26,3 +26,15 @@ cloudflare_zone_id = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 # Defaults — only override if needed
 demo_vm_hostname = "demovm.ricardo.engineer"
 gh_repo          = "hashicardo/vault-pipeline-demo"
+
+# ── HCP Vault peering ─────────────────────────────────────────────────────────
+# Found in HCP Portal → Settings → General
+hcp_org_id     = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+hcp_project_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+
+# Found in HCP Portal → Virtual Networks
+hvn_id = "vault-demo-hvn"
+
+# HCP provider authenticates via environment variables:
+#   export HCP_CLIENT_ID="..."
+#   export HCP_CLIENT_SECRET="..."

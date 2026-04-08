@@ -71,3 +71,18 @@ variable "cloudflare_api_token" {
   type        = string
   sensitive   = true
 }
+
+variable "hcp_org_id" {
+  description = "HCP organization ID — HCP Portal → Settings → General"
+  type        = string
+}
+
+variable "hcp_project_id" {
+  description = "HCP project ID — HCP Portal → Settings → General"
+  type        = string
+}
+
+variable "hvn_id" {
+  description = "HVN ID that the Vault cluster is attached to — HCP Portal → Virtual Networks"
+  type        = string
+}

@@ -8,6 +8,10 @@ terraform {
       source  = "cloudflare/cloudflare"
       version = "~> 5.0"
     }
+    hcp = {
+      source  = "hashicorp/hcp"
+      version = "~> 0.111"
+    }
   }
   required_version = ">= 1.11"
 }
@@ -19,6 +23,15 @@ provider "aws" {
 provider "cloudflare" {
   # Authenticates via CLOUDFLARE_API_TOKEN environment variable
 }
+
+provider "hcp" {
+  project_id = var.hcp_project_id
+  # Authenticates via HCP_CLIENT_ID and HCP_CLIENT_SECRET environment variables
+}
+
+# ── Account identity (used for HCP peering) ───────────────────────────────────
+
+data "aws_caller_identity" "current" {}
 
 # ── AMI ────────────────────────────────────────────────────────────────────────
 # (approved by security)
@@ -237,4 +250,52 @@ resource "cloudflare_dns_record" "demo_vm" {
   type    = "A"
   ttl     = 1     # 1 = automatic (Cloudflare-managed TTL)
   proxied = false # TLS is handled by Caddy on the VM
+}
+
+# ── HCP Vault → VPC peering ────────────────────────────────────────────────────
+# Allows HCP Vault Dedicated (running in an HVN) to reach PostgreSQL on demo-vm.
+
+data "hcp_hvn" "main" {
+  hvn_id = var.hvn_id
+}
+
+resource "hcp_aws_network_peering" "vault_to_demo" {
+  hvn_id          = data.hcp_hvn.main.hvn_id
+  peering_id      = "vault-demo-peering"
+  peer_vpc_id     = aws_vpc.main.id
+  peer_account_id = data.aws_caller_identity.current.account_id
+  peer_vpc_region = var.aws_region
+}
+
+# Route inside the HVN: traffic to the demo VPC CIDR goes via the peering
+resource "hcp_hvn_route" "vault_to_demo" {
+  hvn_link         = data.hcp_hvn.main.self_link
+  hvn_route_id     = "vault-to-demo-vpc"
+  destination_cidr = var.vpc_cidr
+  target_link      = hcp_aws_network_peering.vault_to_demo.self_link
+}
+
+# Accept the peering request on the AWS side
+resource "aws_vpc_peering_connection_accepter" "vault_to_demo" {
+  vpc_peering_connection_id = hcp_aws_network_peering.vault_to_demo.provider_peering_id
+  auto_accept               = true
+
+  tags = { Name = "vault-hvn-to-demo-vpc" }
+}
+
+# Route in the VPC: traffic to the HVN CIDR goes via the peering connection
+resource "aws_route" "hvn_to_demo_vpc" {
+  route_table_id            = aws_route_table.public.id
+  destination_cidr_block    = data.hcp_hvn.main.cidr_block
+  vpc_peering_connection_id = aws_vpc_peering_connection_accepter.vault_to_demo.id
+}
+
+# Allow Vault (HVN) to reach PostgreSQL on the demo VM
+resource "aws_vpc_security_group_ingress_rule" "demo_vm_postgres_hvn" {
+  security_group_id = aws_security_group.demo_vm.id
+  description       = "PostgreSQL from HCP Vault HVN"
+  ip_protocol       = "tcp"
+  from_port         = 5432
+  to_port           = 5432
+  cidr_ipv4         = data.hcp_hvn.main.cidr_block
 }

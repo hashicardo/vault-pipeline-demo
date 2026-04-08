@@ -50,7 +50,7 @@ systemctl start docker
 if [[ ! -x "$CADDY_BIN" ]]; then
   log "INFO" "Downloading Caddy with Cloudflare DNS module..."
   curl -fsSL \
-    "https://caddyserver.com/api/download?os=linux&arch=amd64&p=github.com%2Fcaddy-dns%2Fcloudflare" \
+    "https://caddyserver.com/api/download?os=linux&arch=arm64&p=github.com%2Fcaddy-dns%2Fcloudflare" \
     -o "$CADDY_BIN"
   chmod +x "$CADDY_BIN"
   setcap cap_net_bind_service=+ep "$CADDY_BIN" || true
