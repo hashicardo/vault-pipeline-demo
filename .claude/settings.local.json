@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(terraform init:*)",
+      "Bash(terraform validate:*)",
+      "Bash(terraform fmt:*)",
+      "Bash(echo \"EXIT:$?\")",
+      "mcp__terraform__get_latest_provider_version",
+      "mcp__terraform__search_providers",
+      "mcp__terraform__get_provider_details"
+    ]
+  }
+}

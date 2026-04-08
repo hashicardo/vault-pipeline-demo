@@ -1,0 +1,106 @@
+name: Vault JWT Auth Demo
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  id-token: write   # required for Azure OIDC
+  contents: read
+
+jobs:
+  # ── Job 1: Authenticate with Azure AD and obtain a Vault token ───────────────
+  auth:
+    name: Authenticate (Azure OIDC → Vault JWT)
+    runs-on: [self-hosted, demo]
+    environment: demo
+    outputs:
+      vault_token: ${{ steps.vault-login.outputs.vault_token }}
+
+    steps:
+      - name: Azure login via OIDC (no stored secret)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Exchange Azure token for Vault JWT audience
+        id: get-jwt
+        run: |
+          JWT=$(az account get-access-token \
+            --resource "api://${{ secrets.AZURE_CLIENT_ID }}" \
+            --query accessToken \
+            --output tsv)
+          echo "::add-mask::$JWT"
+          echo "jwt=$JWT" >> "$GITHUB_OUTPUT"
+
+      - name: Login to Vault with JWT
+        id: vault-login
+        env:
+          VAULT_ADDR: ${{ secrets.VAULT_ADDR }}
+          VAULT_NAMESPACE: admin
+        run: |
+          VAULT_TOKEN=$(vault write -field=token auth/jwt/login \
+            role=github-actions-demo \
+            jwt="${{ steps.get-jwt.outputs.jwt }}")
+          echo "::add-mask::$VAULT_TOKEN"
+          echo "vault_token=$VAULT_TOKEN" >> "$GITHUB_OUTPUT"
+
+  # ── Job 2: Fetch a dynamic database credential from Vault ───────────────────
+  fetch-secret:
+    name: Fetch Dynamic DB Credential
+    runs-on: [self-hosted, demo]
+    environment: demo
+    needs: auth
+    outputs:
+      db_user: ${{ steps.fetch.outputs.db_user }}
+      db_pass: ${{ steps.fetch.outputs.db_pass }}
+      created_at: ${{ steps.fetch.outputs.created_at }}
+
+    steps:
+      - name: Read database credential from Vault
+        id: fetch
+        env:
+          VAULT_ADDR: ${{ secrets.VAULT_ADDR }}
+          VAULT_NAMESPACE: admin
+          VAULT_TOKEN: ${{ needs.auth.outputs.vault_token }}
+        run: |
+          SECRET=$(vault read -format=json database/creds/demo-role)
+
+          DB_USER=$(echo "$SECRET" | jq -r '.data.username')
+          DB_PASS=$(echo "$SECRET" | jq -r '.data.password')
+          CREATED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+          echo "::add-mask::$DB_USER"
+          echo "::add-mask::$DB_PASS"
+
+          echo "db_user=$DB_USER"   >> "$GITHUB_OUTPUT"
+          echo "db_pass=$DB_PASS"   >> "$GITHUB_OUTPUT"
+          echo "created_at=$CREATED_AT" >> "$GITHUB_OUTPUT"
+
+          echo "Credential issued: $DB_USER (TTL 300s)"
+
+  # ── Job 3: Use the credential — write to database (the wow moment) ──────────
+  use-secret:
+    name: Use Ephemeral Credential
+    runs-on: [self-hosted, demo]
+    environment: demo
+    needs: fetch-secret
+
+    steps:
+      - name: Connect to PostgreSQL and log the secret
+        env:
+          PGPASSWORD: ${{ needs.fetch-secret.outputs.db_pass }}
+        run: |
+          DB_USER="${{ needs.fetch-secret.outputs.db_user }}"
+          CREATED_AT="${{ needs.fetch-secret.outputs.created_at }}"
+
+          psql \
+            "host=demovm.ricardo.engineer port=5432 dbname=demo_app user=$DB_USER sslmode=disable" \
+            --command "INSERT INTO secret_log (username, created_at, ttl_seconds) \
+                       VALUES ('$DB_USER', '$CREATED_AT', 300);"
+
+          echo "Connected as $DB_USER — secret written to database"
+          echo "Web UI: https://demovm.ricardo.engineer"

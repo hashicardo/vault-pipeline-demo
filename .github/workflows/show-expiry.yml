@@ -1,0 +1,40 @@
+name: Show Secret Expiry (run 5+ min after demo-pipeline)
+
+on:
+  workflow_dispatch:
+    inputs:
+      db_user:
+        description: "DB username from the previous pipeline run"
+        required: true
+      db_pass:
+        description: "DB password from the previous pipeline run"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  show-expiry:
+    name: Prove Credential Is Gone
+    runs-on: [self-hosted, demo]
+    environment: demo
+
+    steps:
+      - name: Attempt to connect with expired credential (MUST FAIL)
+        # This step failing IS the demo — do not add continue-on-error
+        env:
+          PGPASSWORD: ${{ inputs.db_pass }}
+        run: |
+          echo "Attempting to connect as ${{ inputs.db_user }}..."
+          echo "Expected: FATAL: role does not exist"
+          echo ""
+
+          psql \
+            "host=demovm.ricardo.engineer port=5432 dbname=demo_app \
+             user=${{ inputs.db_user }} sslmode=disable" \
+            --command "SELECT 1;"
+
+          # If psql succeeds the TTL hasn't elapsed — pipeline will fail here too
+          echo "ERROR: credential still valid — wait longer before running this workflow"
+          exit 1

@@ -1,0 +1,55 @@
+# ── Terraform ─────────────────────────────────────────────────────────────────
+# Provider plugins and init state
+**/.terraform/
+
+# Terraform state — never commit; use remote state for production
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+
+# Crash logs
+crash.log
+crash.*.log
+
+# tfvars may contain secrets — use terraform.tfvars.example instead
+*.tfvars
+!*.tfvars.example
+
+# Generated plan files
+*.tfplan
+
+# ── Python (web/) ─────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# ── Environment files ─────────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── Docker ────────────────────────────────────────────────────────────────────
+# Local overrides (e.g. bind-mount tweaks during dev)
+docker-compose.override.yml
+
+# ── TLS / Certificates ────────────────────────────────────────────────────────
+# Caddy stores certs locally during dev/testing
+.caddy/
+caddy_data/
+*.pem
+*.key
+*.crt
+
+# ── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Editors ───────────────────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+*~

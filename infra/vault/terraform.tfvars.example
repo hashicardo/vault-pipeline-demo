@@ -1,0 +1,23 @@
+# infra/vault — non-sensitive defaults. Copy to terraform.tfvars and fill in.
+# Sensitive variable (postgres_password) must be set via environment variable:
+#
+#   export TF_VAR_postgres_password="..."   # must match infra/aws TF_VAR_postgres_password
+#
+# Vault authentication via environment variable:
+#   export VAULT_TOKEN="..."                # HCP Vault admin token
+
+# HCP Vault Dedicated cluster address (include port if not 443)
+vault_addr = "https://<cluster-id>.hashicorp.cloud:8200"
+
+# Child namespace Terraform will create under admin — change to reuse this config for different demos
+vault_namespace = "cicd-demo-ns"
+
+# Outputs from infra/azure/ — run `terraform output` there first
+azure_tenant_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+azure_client_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+
+# Defaults — only override if the demo VM hostname or DB name changed
+postgres_username = "postgres"
+db_hostname       = "demovm.ricardo.engineer"
+db_port           = 5432
+db_name           = "demo_app"

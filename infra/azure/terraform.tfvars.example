@@ -1,0 +1,15 @@
+# infra/azure — no Terraform input variables.
+# Authentication is handled entirely via environment variables:
+#
+# Option A — Azure CLI (local dev):
+#   az login
+#   export ARM_USE_CLI=true
+#
+# Option B — Service Principal:
+#   export ARM_TENANT_ID="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+#   export ARM_CLIENT_ID="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+#   export ARM_CLIENT_SECRET="..."
+#
+# After apply, capture outputs for infra/vault:
+#   terraform output azure_tenant_id
+#   terraform output azure_client_id

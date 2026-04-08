@@ -1,0 +1,28 @@
+# infra/aws — non-sensitive defaults. Copy to terraform.tfvars and fill in.
+# Sensitive variables (postgres_password, gh_runner_token, cloudflare_api_token)
+# must be set via environment variables — never put them in a .tfvars file:
+#
+#   export TF_VAR_postgres_password="..."
+#   export TF_VAR_cloudflare_api_token="..."
+#   export TF_VAR_gh_runner_token="$(gh api \
+#     repos/hashicardo/vault-pipeline-demo/actions/runners/registration-token \
+#     -X POST --jq .token)"
+
+aws_region    = "eu-west-2"
+vpc_cidr      = "10.0.0.0/16"
+subnet_cidr   = "10.0.1.0/24"
+instance_type = "t4g.medium"
+
+# Your home and office IPs as /32 CIDRs
+home_ip   = "1.2.3.4/32"
+office_ip = "5.6.7.8/32"
+
+# Contents of your SSH public key (e.g. ~/.ssh/id_ed25519.pub)
+ssh_public_key = "ssh-ed25519 AAAA... user@host"
+
+# Cloudflare zone ID for ricardo.engineer (found in Cloudflare dashboard → Overview)
+cloudflare_zone_id = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+
+# Defaults — only override if needed
+demo_vm_hostname = "demovm.ricardo.engineer"
+gh_repo          = "hashicardo/vault-pipeline-demo"
