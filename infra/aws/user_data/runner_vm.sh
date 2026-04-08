@@ -57,6 +57,19 @@ if ! command -v az &>/dev/null; then
   log "INFO" "Azure CLI $(az version --query '\"azure-cli\"' -o tsv) installed."
 fi
 
+# ── 3. Vault CLI ───────────────────────────────────────────────────────────────
+if ! command -v vault &>/dev/null; then
+  log "INFO" "Installing Vault CLI..."
+  curl -fsSL https://apt.releases.hashicorp.com/gpg \
+    | gpg --dearmor \
+    | tee /etc/apt/trusted.gpg.d/hashicorp.gpg > /dev/null
+  echo "deb [arch=arm64] https://apt.releases.hashicorp.com $(lsb_release -cs) main" \
+    | tee /etc/apt/sources.list.d/hashicorp.list
+  apt-get update -y
+  apt-get install -y vault
+  log "INFO" "Vault CLI $(vault version) installed."
+fi
+
 # ── 4. GitHub runner user ──────────────────────────────────────────────────────
 if ! id "$RUNNER_USER" &>/dev/null; then
   log "INFO" "Creating $RUNNER_USER user..."
