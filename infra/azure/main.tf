@@ -14,6 +14,10 @@ data "azuread_client_config" "current" {}
 
 resource "azuread_application" "vault_demo" {
   display_name = "vault-pipeline-demo"
+
+  api {
+    requested_access_token_version = 2
+  }
 }
 
 resource "azuread_application_identifier_uri" "vault_demo" {
