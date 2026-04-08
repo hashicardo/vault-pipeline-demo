@@ -16,6 +16,11 @@ resource "azuread_application" "vault_demo" {
   display_name = "vault-pipeline-demo"
 }
 
+resource "azuread_application_identifier_uri" "vault_demo" {
+  application_id = azuread_application.vault_demo.id
+  identifier_uri = "api://${azuread_application.vault_demo.client_id}"
+}
+
 resource "azuread_service_principal" "vault_demo" {
   client_id = azuread_application.vault_demo.client_id
 }
