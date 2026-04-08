@@ -38,17 +38,32 @@ apt-get install -y \
   curl \
   jq \
   git \
+  gnupg \
+  lsb-release \
   postgresql-client \
   ca-certificates \
   libicu-dev
 
-# ── 2. GitHub runner user ──────────────────────────────────────────────────────
+# ── 2. Azure CLI ───────────────────────────────────────────────────────────────
+if ! command -v az &>/dev/null; then
+  log "INFO" "Installing Azure CLI..."
+  curl -sL https://packages.microsoft.com/keys/microsoft.asc \
+    | gpg --dearmor \
+    | tee /etc/apt/trusted.gpg.d/microsoft.gpg > /dev/null
+  echo "deb [arch=arm64] https://packages.microsoft.com/repos/azure-cli/ $(lsb_release -cs) main" \
+    | tee /etc/apt/sources.list.d/azure-cli.list
+  apt-get update -y
+  apt-get install -y azure-cli
+  log "INFO" "Azure CLI $(az version --query '\"azure-cli\"' -o tsv) installed."
+fi
+
+# ── 4. GitHub runner user ──────────────────────────────────────────────────────
 if ! id "$RUNNER_USER" &>/dev/null; then
   log "INFO" "Creating $RUNNER_USER user..."
   useradd -m -s /bin/bash "$RUNNER_USER"
 fi
 
-# ── 3. Download GitHub Actions runner ─────────────────────────────────────────
+# ── 5. Download GitHub Actions runner ─────────────────────────────────────────
 if [[ ! -d "$RUNNER_DIR" ]]; then
   log "INFO" "Downloading GitHub Actions runner v$RUNNER_VERSION..."
   sudo -u "$RUNNER_USER" mkdir -p "$RUNNER_DIR"
@@ -59,7 +74,7 @@ if [[ ! -d "$RUNNER_DIR" ]]; then
   rm /tmp/actions-runner.tar.gz
 fi
 
-# ── 4. Configure runner ────────────────────────────────────────────────────────
+# ── 6. Configure runner ────────────────────────────────────────────────────────
 log "INFO" "Configuring runner for $GH_REPO..."
 sudo -u "$RUNNER_USER" "$RUNNER_DIR/config.sh" \
   --url "https://github.com/$GH_REPO" \
@@ -69,7 +84,7 @@ sudo -u "$RUNNER_USER" "$RUNNER_DIR/config.sh" \
   --unattended \
   --replace
 
-# ── 5. Install as systemd service ─────────────────────────────────────────────
+# ── 7. Install as systemd service ─────────────────────────────────────────────
 log "INFO" "Installing runner as systemd service..."
 cd "$RUNNER_DIR"
 "$RUNNER_DIR/svc.sh" install "$RUNNER_USER"
