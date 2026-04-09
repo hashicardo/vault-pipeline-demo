@@ -30,7 +30,7 @@ jobs:
         id: get-jwt
         run: |
           JWT=$(az account get-access-token \
-            --resource "api://${{ secrets.AZURE_CLIENT_ID }}" \
+            --scope "api://${{ secrets.AZURE_CLIENT_ID }}/.default" \
             --query accessToken \
             --output tsv)
           echo "::add-mask::$JWT"

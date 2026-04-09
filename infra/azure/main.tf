@@ -4,6 +4,10 @@ terraform {
       source  = "hashicorp/azuread"
       version = "~> 3.0"
     }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.0"
+    }
   }
   required_version = ">= 1.11"
 }
@@ -12,11 +16,22 @@ provider "azuread" {}
 
 data "azuread_client_config" "current" {}
 
+resource "random_uuid" "vault_auth_scope_id" {}
+
 resource "azuread_application" "vault_demo" {
   display_name = "vault-pipeline-demo"
 
   api {
     requested_access_token_version = 2
+
+    oauth2_permission_scope {
+      admin_consent_description  = "Allows Vault to validate this application's tokens"
+      admin_consent_display_name = "Vault Token Validation"
+      enabled                    = true
+      id                         = random_uuid.vault_auth_scope_id.result
+      type                       = "Admin"
+      value                      = "vault.auth"
+    }
   }
 }
 
