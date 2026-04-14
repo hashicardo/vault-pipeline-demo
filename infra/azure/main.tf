@@ -17,6 +17,7 @@ provider "azuread" {}
 data "azuread_client_config" "current" {}
 
 resource "random_uuid" "vault_auth_scope_id" {}
+resource "random_uuid" "vault_app_role_id" {}
 
 resource "azuread_application" "vault_demo" {
   display_name = "vault-pipeline-demo"
@@ -33,6 +34,23 @@ resource "azuread_application" "vault_demo" {
       value                      = "vault.auth"
     }
   }
+
+  # Application permission (required for client credentials / service principal flow)
+  app_role {
+    allowed_member_types = ["Application"]
+    description          = "Allows the pipeline SP to obtain tokens for Vault JWT auth"
+    display_name         = "Vault.Auth"
+    enabled              = true
+    id                   = random_uuid.vault_app_role_id.result
+    value                = "VaultAccess"
+  }
+}
+
+# Grant the SP the app role on its own application (enables /.default client creds token)
+resource "azuread_app_role_assignment" "vault_demo_self" {
+  app_role_id         = random_uuid.vault_app_role_id.result
+  principal_object_id = azuread_service_principal.vault_demo.object_id
+  resource_object_id  = azuread_service_principal.vault_demo.object_id
 }
 
 resource "azuread_application_identifier_uri" "vault_demo" {
@@ -50,4 +68,11 @@ resource "azuread_application_federated_identity_credential" "github_actions" {
   issuer         = "https://token.actions.githubusercontent.com"
   subject        = "repo:hashicardo/vault-pipeline-demo:environment:demo"
   audiences      = ["api://AzureADTokenExchange"]
+}
+
+# Client secret for manual debugging only — not used by the pipeline
+resource "azuread_application_password" "debug" {
+  application_id = azuread_application.vault_demo.id
+  display_name   = "manual-debug"
+  end_date       = "2027-01-01T00:00:00Z"
 }
