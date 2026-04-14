@@ -16,15 +16,15 @@ def get_connection():
     )
 
 
-def fetch_latest():
+def fetch_data():
     conn = get_connection()
     try:
         cur = conn.cursor()
         cur.execute(
             "SELECT username, created_at, ttl_seconds "
-            "FROM secret_log ORDER BY created_at DESC LIMIT 1"
+            "FROM secret_log ORDER BY created_at DESC"
         )
-        return cur.fetchone()
+        return cur.fetchall()
     finally:
         conn.close()
 
@@ -32,37 +32,43 @@ def fetch_latest():
 @app.route("/")
 def index():
     error = None
-    row = None
+    rows = []
 
     try:
-        row = fetch_latest()
+        rows = fetch_data()
     except Exception as exc:
         error = str(exc)
 
-    if row:
-        username, created_at, ttl_seconds = row
-        # Ensure timezone-aware datetime
+    latest = None
+    if rows:
+        username, created_at, ttl_seconds = rows[0]
         if created_at.tzinfo is None:
             created_at = created_at.replace(tzinfo=timezone.utc)
         expires_at = created_at + timedelta(seconds=ttl_seconds)
-        return render_template(
-            "index.html",
-            username=username,
-            created_at=created_at.strftime("%Y-%m-%d %H:%M:%S UTC"),
-            ttl_seconds=ttl_seconds,
-            expires_at=expires_at.isoformat(),
-            has_data=True,
-            error=None,
-        )
+        latest = {
+            "username": username,
+            "created_at": created_at.strftime("%Y-%m-%d %H:%M:%S UTC"),
+            "ttl_seconds": ttl_seconds,
+            "expires_at": expires_at.isoformat(),
+        }
+
+    all_rows = []
+    for username, created_at, ttl_seconds in rows:
+        if created_at.tzinfo is None:
+            created_at = created_at.replace(tzinfo=timezone.utc)
+        expires_at = created_at + timedelta(seconds=ttl_seconds)
+        all_rows.append({
+            "username": username,
+            "created_at": created_at.strftime("%Y-%m-%d %H:%M:%S UTC"),
+            "ttl_seconds": ttl_seconds,
+            "expires_at_iso": expires_at.isoformat(),
+        })
 
     return render_template(
         "index.html",
-        has_data=False,
+        latest=latest,
+        all_rows=all_rows,
         error=error,
-        username=None,
-        created_at=None,
-        ttl_seconds=None,
-        expires_at=None,
     )
 
 

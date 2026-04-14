@@ -63,7 +63,7 @@ jobs:
           PGPASSWORD="$DB_PASS" psql \
             "host=${{ secrets.DEMO_VM_PRIVATE_IP }} port=5432 dbname=demo_app user=$DB_USER sslmode=disable" \
             --command "INSERT INTO secret_log (username, created_at, ttl_seconds) \
-                       VALUES ('$DB_USER', '$CREATED_AT', 300);"
+                       VALUES ('$DB_USER', '$CREATED_AT', 60);"
 
           echo "Connected as $DB_USER — secret written to database"
           echo "Web UI: https://demovm.ricardo.engineer"

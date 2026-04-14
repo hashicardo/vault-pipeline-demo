@@ -50,8 +50,8 @@ resource "vault_database_secret_backend_role" "demo_role" {
   name      = "demo-role"
   db_name   = vault_database_secret_backend_connection.postgres.name
 
-  default_ttl = 300
-  max_ttl     = 600
+  default_ttl = 60
+  max_ttl     = 120
 
   creation_statements = [
     "CREATE ROLE \"{{name}}\" WITH LOGIN PASSWORD '{{password}}' VALID UNTIL '{{expiration}}';",

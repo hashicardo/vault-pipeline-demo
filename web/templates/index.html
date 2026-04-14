@@ -13,9 +13,11 @@
       color: #c9d1d9;
       min-height: 100vh;
       display: flex;
+      flex-direction: column;
       align-items: center;
-      justify-content: center;
+      justify-content: flex-start;
       padding: 2rem;
+      gap: 1.5rem;
     }
 
     .card {
@@ -89,24 +91,109 @@
       color: #484f58;
       text-align: center;
     }
+
+    /* Users table card */
+    .users-card {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      padding: 2rem 3rem;
+      max-width: 860px;
+      width: 100%;
+    }
+
+    .users-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.5rem;
+      border-bottom: 1px solid #30363d;
+      padding-bottom: 1rem;
+    }
+
+    .users-header h2 {
+      font-size: 1rem;
+      color: #8b949e;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+
+    .btn-refresh {
+      background: #21262d;
+      color: #c9d1d9;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      padding: 0.4rem 1rem;
+      font-family: inherit;
+      font-size: 0.8rem;
+      cursor: pointer;
+      letter-spacing: 0.05em;
+    }
+
+    .btn-refresh:hover {
+      background: #30363d;
+      border-color: #8b949e;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+    }
+
+    th {
+      text-align: left;
+      color: #8b949e;
+      padding: 0.4rem 0.75rem;
+      border-bottom: 1px solid #30363d;
+      font-weight: normal;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    td {
+      padding: 0.55rem 0.75rem;
+      border-bottom: 1px solid #21262d;
+      color: #e6edf3;
+    }
+
+    tr:last-child td { border-bottom: none; }
+
+    .badge {
+      display: inline-block;
+      padding: 0.15rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.75rem;
+    }
+
+    .badge-active  { background: #1a3a1a; color: #3fb950; }
+    .badge-expired { background: #3a1a1a; color: #f85149; }
+
+    .empty-table {
+      text-align: center;
+      color: #484f58;
+      padding: 1.5rem 0;
+    }
   </style>
 </head>
 <body>
+
+<!-- ── Latest secret status card (unchanged) ─────────────────────────────── -->
 <div class="card">
   <h1>Vault &mdash; Dynamic Secret Status</h1>
 
-  {% if has_data %}
+  {% if latest %}
     <div class="field">
       <span class="label">Secret username</span>
-      <span class="value">{{ username }}</span>
+      <span class="value">{{ latest.username }}</span>
     </div>
     <div class="field">
       <span class="label">Created at</span>
-      <span class="value">{{ created_at }}</span>
+      <span class="value">{{ latest.created_at }}</span>
     </div>
     <div class="field">
       <span class="label">TTL</span>
-      <span class="value">{{ ttl_seconds }} seconds</span>
+      <span class="value">{{ latest.ttl_seconds }} seconds</span>
     </div>
 
     <div class="countdown-wrapper">
@@ -115,7 +202,7 @@
     </div>
 
     <script>
-      const expiresAt = new Date("{{ expires_at }}");
+      const expiresAt = new Date("{{ latest.expires_at }}");
 
       function tick() {
         const now = new Date();
@@ -157,8 +244,53 @@
   <p class="refresh-note">Page auto-refreshes every 10 seconds</p>
 </div>
 
+<!-- ── All issued users ───────────────────────────────────────────────────── -->
+<div class="users-card">
+  <div class="users-header">
+    <h2>Vault-issued DB users</h2>
+    <button class="btn-refresh" onclick="location.reload()">&#8635; Refresh</button>
+  </div>
+
+  {% if all_rows %}
+    <table>
+      <thead>
+        <tr>
+          <th>Username</th>
+          <th>Created at</th>
+          <th>TTL</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody id="users-tbody">
+        {% for row in all_rows %}
+        <tr data-expires="{{ row.expires_at_iso }}">
+          <td>{{ row.username }}</td>
+          <td>{{ row.created_at }}</td>
+          <td>{{ row.ttl_seconds }}s</td>
+          <td><span class="badge" id="badge-{{ loop.index }}">…</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="empty-table">No credentials issued yet.</p>
+  {% endif %}
+</div>
+
 <script>
-  // Auto-refresh the full page every 10 seconds to pick up new pipeline runs
+  // Set active/expired badges based on expiry time
+  document.querySelectorAll("#users-tbody tr").forEach((row, i) => {
+    const expires = new Date(row.dataset.expires);
+    const badge = document.getElementById("badge-" + (i + 1));
+    if (new Date() < expires) {
+      badge.textContent = "active";
+      badge.className = "badge badge-active";
+    } else {
+      badge.textContent = "expired";
+      badge.className = "badge badge-expired";
+    }
+  });
+
   setTimeout(() => location.reload(), 10000);
 </script>
 </body>

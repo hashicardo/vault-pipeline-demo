@@ -1,4 +1,4 @@
-name: Show Secret Expiry (run 5+ min after demo-pipeline)
+name: Show Secret Expiry (run 1+ min after demo-pipeline)
 
 on:
   workflow_dispatch:
