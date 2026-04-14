@@ -31,7 +31,7 @@ jobs:
           echo ""
 
           psql \
-            "host=demovm.ricardo.engineer port=5432 dbname=demo_app \
+            "host=${{ secrets.DEMO_VM_PRIVATE_IP }} port=5432 dbname=demo_app \
              user=${{ inputs.db_user }} sslmode=disable" \
             --command "SELECT 1;"
 

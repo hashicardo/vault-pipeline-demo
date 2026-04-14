@@ -61,7 +61,7 @@ jobs:
           CREATED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
           PGPASSWORD="$DB_PASS" psql \
-            "host=demovm.ricardo.engineer port=5432 dbname=demo_app user=$DB_USER sslmode=disable" \
+            "host=${{ secrets.DEMO_VM_PRIVATE_IP }} port=5432 dbname=demo_app user=$DB_USER sslmode=disable" \
             --command "INSERT INTO secret_log (username, created_at, ttl_seconds) \
                        VALUES ('$DB_USER', '$CREATED_AT', 300);"
 
