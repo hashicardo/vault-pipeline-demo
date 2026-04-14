@@ -10,11 +10,11 @@ permissions:
   contents: read
 
 jobs:
-  # ── Job 1: Authenticate with Azure AD and obtain a Vault token ───────────────
-  auth:
-    name: Authenticate (Azure OIDC → Vault JWT)
+  demo:
+    name: Azure OIDC → Vault JWT → Dynamic DB Credential
     runs-on: [self-hosted, demo]
     environment: demo
+
     steps:
       - name: Azure login via OIDC (no stored secret)
         uses: azure/login@v3
@@ -23,48 +23,7 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           allow-no-subscriptions: true
 
-      - name: Exchange Azure token for Vault JWT audience
-        id: get-jwt
-        run: |
-          JWT=$(az account get-access-token \
-            --scope "api://${{ secrets.AZURE_CLIENT_ID }}/.default" \
-            --query accessToken \
-            --output tsv)
-          echo "::add-mask::$JWT"
-          echo "jwt=$JWT" >> "$GITHUB_OUTPUT"
-
-      - name: Login to Vault with JWT
-        id: vault-login
-        env:
-          VAULT_ADDR: ${{ secrets.VAULT_ADDR }}
-          VAULT_NAMESPACE: admin/cicd-demo-ns
-        run: |
-          VAULT_TOKEN=$(vault write -field=token auth/jwt/login \
-            role=github-actions-demo \
-            jwt="${{ steps.get-jwt.outputs.jwt }}")
-          echo "::add-mask::$VAULT_TOKEN"
-
-  # ── Job 2: Fetch a dynamic database credential from Vault ───────────────────
-  fetch-secret:
-    name: Fetch Dynamic DB Credential
-    runs-on: [self-hosted, demo]
-    environment: demo
-    needs: auth
-    outputs:
-      db_user: ${{ steps.fetch.outputs.db_user }}
-      db_pass: ${{ steps.fetch.outputs.db_pass }}
-      created_at: ${{ steps.fetch.outputs.created_at }}
-
-    steps:
-      - name: Azure login via OIDC
-        uses: azure/login@v3
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          allow-no-subscriptions: true
-
       - name: Exchange Azure token for Vault token
-        id: vault-login
         env:
           VAULT_ADDR: ${{ secrets.VAULT_ADDR }}
           VAULT_NAMESPACE: admin/cicd-demo-ns
@@ -74,14 +33,14 @@ jobs:
             --query accessToken \
             --output tsv)
           echo "::add-mask::$JWT"
+
           VAULT_TOKEN=$(vault write -field=token auth/jwt/login \
             role=github-actions-demo \
             jwt="$JWT")
           echo "::add-mask::$VAULT_TOKEN"
           echo "VAULT_TOKEN=$VAULT_TOKEN" >> "$GITHUB_ENV"
 
-      - name: Read database credential from Vault
-        id: fetch
+      - name: Fetch dynamic DB credential from Vault
         env:
           VAULT_ADDR: ${{ secrets.VAULT_ADDR }}
           VAULT_NAMESPACE: admin/cicd-demo-ns
@@ -90,33 +49,18 @@ jobs:
 
           DB_USER=$(echo "$SECRET" | jq -r '.data.username')
           DB_PASS=$(echo "$SECRET" | jq -r '.data.password')
-          CREATED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-
           echo "::add-mask::$DB_USER"
           echo "::add-mask::$DB_PASS"
-
-          echo "db_user=$DB_USER"   >> "$GITHUB_OUTPUT"
-          echo "db_pass=$DB_PASS"   >> "$GITHUB_OUTPUT"
-          echo "created_at=$CREATED_AT" >> "$GITHUB_OUTPUT"
+          echo "DB_USER=$DB_USER" >> "$GITHUB_ENV"
+          echo "DB_PASS=$DB_PASS" >> "$GITHUB_ENV"
 
           echo "Credential issued: $DB_USER (TTL 300s)"
 
-  # ── Job 3: Use the credential — write to database (the wow moment) ──────────
-  use-secret:
-    name: Use Ephemeral Credential
-    runs-on: [self-hosted, demo]
-    environment: demo
-    needs: fetch-secret
-
-    steps:
-      - name: Connect to PostgreSQL and log the secret
-        env:
-          PGPASSWORD: ${{ needs.fetch-secret.outputs.db_pass }}
+      - name: Connect to PostgreSQL and log the secret (the wow moment)
         run: |
-          DB_USER="${{ needs.fetch-secret.outputs.db_user }}"
-          CREATED_AT="${{ needs.fetch-secret.outputs.created_at }}"
+          CREATED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
-          psql \
+          PGPASSWORD="$DB_PASS" psql \
             "host=demovm.ricardo.engineer port=5432 dbname=demo_app user=$DB_USER sslmode=disable" \
             --command "INSERT INTO secret_log (username, created_at, ttl_seconds) \
                        VALUES ('$DB_USER', '$CREATED_AT', 300);"
