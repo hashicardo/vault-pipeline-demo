@@ -55,7 +55,8 @@ resource "vault_database_secret_backend_role" "demo_role" {
 
   creation_statements = [
     "CREATE ROLE \"{{name}}\" WITH LOGIN PASSWORD '{{password}}' VALID UNTIL '{{expiration}}';",
-    "GRANT SELECT, INSERT ON secret_log TO \"{{name}}\";"
+    "GRANT SELECT, INSERT ON secret_log TO \"{{name}}\";",
+    "GRANT USAGE ON SEQUENCE secret_log_id_seq TO \"{{name}}\";"
   ]
 
   revocation_statements = [
