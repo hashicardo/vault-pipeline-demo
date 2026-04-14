@@ -79,11 +79,10 @@ resource "vault_jwt_auth_backend_role" "github_actions" {
   role_name = "github-actions-demo"
   role_type = "jwt"
 
-  bound_audiences = ["api://${var.azure_client_id}"]
+  bound_audiences = [var.azure_client_id]
 
   bound_claims = {
-    repository  = "hashicardo/vault-pipeline-demo"
-    environment = "demo"
+    roles = "VaultAccess"
   }
 
   user_claim     = "sub"
