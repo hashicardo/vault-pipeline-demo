@@ -15,9 +15,6 @@ jobs:
     name: Authenticate (Azure OIDC → Vault JWT)
     runs-on: [self-hosted, demo]
     environment: demo
-    outputs:
-      vault_token: ${{ steps.vault-login.outputs.vault_token }}
-
     steps:
       - name: Azure login via OIDC (no stored secret)
         uses: azure/login@v3
@@ -46,7 +43,6 @@ jobs:
             role=github-actions-demo \
             jwt="${{ steps.get-jwt.outputs.jwt }}")
           echo "::add-mask::$VAULT_TOKEN"
-          echo "vault_token=$VAULT_TOKEN" >> "$GITHUB_OUTPUT"
 
   # ── Job 2: Fetch a dynamic database credential from Vault ───────────────────
   fetch-secret:
@@ -60,12 +56,35 @@ jobs:
       created_at: ${{ steps.fetch.outputs.created_at }}
 
     steps:
+      - name: Azure login via OIDC
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          allow-no-subscriptions: true
+
+      - name: Exchange Azure token for Vault token
+        id: vault-login
+        env:
+          VAULT_ADDR: ${{ secrets.VAULT_ADDR }}
+          VAULT_NAMESPACE: admin/cicd-demo-ns
+        run: |
+          JWT=$(az account get-access-token \
+            --scope "api://${{ secrets.AZURE_CLIENT_ID }}/.default" \
+            --query accessToken \
+            --output tsv)
+          echo "::add-mask::$JWT"
+          VAULT_TOKEN=$(vault write -field=token auth/jwt/login \
+            role=github-actions-demo \
+            jwt="$JWT")
+          echo "::add-mask::$VAULT_TOKEN"
+          echo "VAULT_TOKEN=$VAULT_TOKEN" >> "$GITHUB_ENV"
+
       - name: Read database credential from Vault
         id: fetch
         env:
           VAULT_ADDR: ${{ secrets.VAULT_ADDR }}
           VAULT_NAMESPACE: admin/cicd-demo-ns
-          VAULT_TOKEN: ${{ needs.auth.outputs.vault_token }}
         run: |
           SECRET=$(vault read -format=json database/creds/demo-role)
 
