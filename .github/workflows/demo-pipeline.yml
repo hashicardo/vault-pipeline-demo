@@ -49,6 +49,10 @@ jobs:
 
           DB_USER=$(echo "$SECRET" | jq -r '.data.username')
           DB_PASS=$(echo "$SECRET" | jq -r '.data.password')
+
+          # Persist for show-expiry workflow (same runner, read before masking)
+          printf 'DB_USER=%s\nDB_PASS=%s\n' "$DB_USER" "$DB_PASS" > /tmp/vault-demo-creds
+
           echo "::add-mask::$DB_USER"
           echo "::add-mask::$DB_PASS"
           echo "DB_USER=$DB_USER" >> "$GITHUB_ENV"

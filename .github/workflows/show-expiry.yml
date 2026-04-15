@@ -2,14 +2,6 @@ name: Show Secret Expiry (run 1+ min after demo-pipeline)
 
 on:
   workflow_dispatch:
-    inputs:
-      db_user:
-        description: "DB username from the previous pipeline run"
-        required: true
-      db_pass:
-        description: "DB password from the previous pipeline run"
-        required: true
-        type: string
 
 permissions:
   contents: read
@@ -23,18 +15,20 @@ jobs:
     steps:
       - name: Attempt to connect with expired credential (MUST FAIL)
         # This step failing IS the demo — do not add continue-on-error
-        env:
-          PGPASSWORD: ${{ inputs.db_pass }}
         run: |
-          echo "Attempting to connect as ${{ inputs.db_user }}..."
+          source /tmp/vault-demo-creds
+          echo "::add-mask::$DB_USER"
+          echo "::add-mask::$DB_PASS"
+
+          echo "Attempting to connect as $DB_USER..."
           echo "Expected: FATAL: role does not exist"
           echo ""
 
-          psql \
+          PGPASSWORD="$DB_PASS" psql \
             "host=${{ secrets.DEMO_VM_PRIVATE_IP }} port=5432 dbname=demo_app \
-             user=${{ inputs.db_user }} sslmode=disable" \
+             user=$DB_USER sslmode=disable" \
             --command "SELECT 1;"
 
-          # If psql succeeds the TTL hasn't elapsed — pipeline will fail here too
+          # If psql succeeds the TTL hasn't elapsed — fail explicitly
           echo "ERROR: credential still valid — wait longer before running this workflow"
           exit 1
